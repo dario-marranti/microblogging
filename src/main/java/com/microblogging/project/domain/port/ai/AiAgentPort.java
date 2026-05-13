@@ -1,4 +1,4 @@
-package com.microblogging.project.application.port.out;
+package com.microblogging.project.domain.port.ai;
 
 import java.util.List;
 

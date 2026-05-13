@@ -16,13 +16,6 @@ import java.time.Duration;
  */
 @Configuration
 public class AgentConfig {
-
-    /**
-     * RestTemplate con timeouts razonables para llamadas a la API de Anthropic
-     * y a los endpoints internos de la propia app.
-     *
-     * Las llamadas a Claude pueden tardar 3-10 segundos dependiendo del modelo.
-     */
     @Bean
     public RestTemplate agentRestTemplate(RestTemplateBuilder builder) {
         return builder

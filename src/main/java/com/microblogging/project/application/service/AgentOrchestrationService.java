@@ -3,8 +3,8 @@ package com.microblogging.project.application.service;
 import com.microblogging.project.adapter.in.web.dto.AgentSimulationRequest;
 import com.microblogging.project.adapter.in.web.dto.AgentSimulationResult;
 import com.microblogging.project.application.port.in.RunAgentSimulationUseCase;
-import com.microblogging.project.application.port.out.AiAgentPort;
-import com.microblogging.project.application.port.out.AiAgentPort.UserProfile;
+import com.microblogging.project.domain.port.ai.AiAgentPort;
+import com.microblogging.project.domain.port.ai.AiAgentPort.UserProfile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -14,14 +14,8 @@ import org.springframework.web.client.RestTemplate;
 import java.util.*;
 
 /**
- * Orquesta la simulación completa:
- * 1. Genera perfiles de usuario con IA
- * 2. Registra los usuarios en el sistema (via endpoints existentes)
- * 3. Crea relaciones de follow aleatorias
- * 4. Genera y publica tweets con IA
- *
- * Llama a los endpoints REST internos del propio microblogging
- * para reutilizar toda la lógica de negocio existente.
+ * Orquestador de simulación mejorado.
+ * CORRECCIÓN: Ahora registra físicamente a los usuarios antes de intentar seguirlos.
  */
 @Slf4j
 @Service
@@ -31,40 +25,45 @@ public class AgentOrchestrationService implements RunAgentSimulationUseCase {
     private final AiAgentPort aiAgent;
     private final RestTemplate restTemplate;
 
-    /** URL base de la propia API — se inyecta desde application.properties */
     @org.springframework.beans.factory.annotation.Value("${agent.api.base-url:http://localhost:9090}")
     private String apiBaseUrl;
 
     @Override
     public AgentSimulationResult execute(AgentSimulationRequest request) {
-
-        List<String> log     = new ArrayList<>();
+        List<String> logs = new ArrayList<>();
         List<String> userIds = new ArrayList<>();
-        int tweetsCreated    = 0;
-        int followsCreated   = 0;
+        int tweetsCreated = 0;
+        int followsCreated = 0;
 
-        // ── 1. Crear usuarios ────────────────────────────────────────────────
-        log.add("=== FASE 1: Generando usuarios ===");
+        // ── 1. Generar y REGISTRAR usuarios ──────────────────────────────────
+        logs.add("=== FASE 1: Generando y registrando usuarios ===");
         Map<String, UserProfile> profileByUserId = new LinkedHashMap<>();
 
         for (int i = 0; i < request.numberOfUsers(); i++) {
             String userId = UUID.randomUUID().toString();
             UserProfile profile = aiAgent.generateUserProfile(i);
 
-            profileByUserId.put(userId, profile);
-            userIds.add(userId);
+            // IMPORTANTE: Llamar al endpoint de registro para persistir el usuario
+            boolean registered = callCreateUser(userId, profile);
 
-            log.add(String.format("✓ Usuario creado: id=%s username='%s' bio='%s'",
-                    userId, profile.username(), profile.bio()));
+            if (registered) {
+                profileByUserId.put(userId, profile);
+                userIds.add(userId);
+                logs.add(String.format("✓ Usuario creado y persistido: id=%s username='%s'", userId, profile.username()));
+            } else {
+                logs.add(String.format("✗ Error persistiendo usuario: %s", profile.username()));
+            }
         }
 
+        // Pequeña pausa para asegurar consistencia en DB
+        try { Thread.sleep(300); } catch (InterruptedException ignored) {}
+
         // ── 2. Crear follows ─────────────────────────────────────────────────
-        log.add("=== FASE 2: Estableciendo follows ===");
+        logs.add("=== FASE 2: Estableciendo follows ===");
         Random rng = new Random();
         List<String> userIdList = new ArrayList<>(userIds);
 
         for (String followerId : userIdList) {
-            // Elegir followsPerUser usuarios distintos al azar
             List<String> candidates = new ArrayList<>(userIdList);
             candidates.remove(followerId);
             Collections.shuffle(candidates, rng);
@@ -75,102 +74,86 @@ public class AgentOrchestrationService implements RunAgentSimulationUseCase {
                 boolean ok = callFollow(followerId, followeeId);
                 if (ok) {
                     followsCreated++;
-                    log.add(String.format("✓ Follow: %s → %s",
+                    logs.add(String.format("✓ Follow: @%s → @%s",
                             profileByUserId.get(followerId).username(),
                             profileByUserId.get(followeeId).username()));
                 } else {
-                    log.add(String.format("✗ Follow fallido: %s → %s", followerId, followeeId));
+                    logs.add(String.format("✗ Follow fallido: %s → %s (Verificar si el usuario existe en DB)", followerId, followeeId));
                 }
             }
         }
 
         // ── 3. Publicar tweets ───────────────────────────────────────────────
-        log.add("=== FASE 3: Publicando tweets ===");
+        logs.add("=== FASE 3: Publicando tweets ===");
         for (Map.Entry<String, UserProfile> entry : profileByUserId.entrySet()) {
-            String userId      = entry.getKey();
+            String userId = entry.getKey();
             UserProfile profile = entry.getValue();
 
-            List<String> tweets = aiAgent.generateTweets(
-                    profile.username(), request.topic(), request.tweetsPerUser());
+            List<String> tweets = aiAgent.generateTweets(profile.username(), request.topic(), request.tweetsPerUser());
 
             for (String content : tweets) {
                 boolean ok = callPostTweet(userId, content);
                 if (ok) {
                     tweetsCreated++;
-                    log.add(String.format("✓ Tweet de @%s: %s", profile.username(),
-                            content.length() > 60 ? content.substring(0, 60) + "…" : content));
-                } else {
-                    log.add(String.format("✗ Tweet fallido para @%s", profile.username()));
+                    logs.add(String.format("✓ Tweet de @%s: %s", profile.username(),
+                            content.length() > 50 ? content.substring(0, 50) + "..." : content));
                 }
             }
         }
 
-        log.add("=== SIMULACIÓN COMPLETADA ===");
-
-        return new AgentSimulationResult(
-                userIds.size(),
-                tweetsCreated,
-                followsCreated,
-                userIds,
-                log
-        );
+        logs.add("=== SIMULACIÓN COMPLETADA ===");
+        return new AgentSimulationResult(userIds.size(), tweetsCreated, followsCreated, userIds, logs);
     }
 
     // ── Helpers HTTP ──────────────────────────────────────────────────────────
 
     /**
-     * POST /follow con header X-User-Id = followerId y body { "followeeId": "..." }
-     * Retorna true si la respuesta fue 2xx.
+     * Registra el usuario en el sistema llamando a POST /users
      */
-    private boolean callFollow(String followerId, String followeeId) {
+    private boolean callCreateUser(String userId, UserProfile profile) {
+        try {
+            Map<String, String> body = new HashMap<>();
+            body.put("id", userId);
+            body.put("username", profile.username());
+            body.put("bio", profile.bio());
+
+            ResponseEntity<Void> response = restTemplate.postForEntity(apiBaseUrl + "/users", body, Void.class);
+            return response.getStatusCode().is2xxSuccessful();
+        } catch (Exception e) {
+            log.error("Error registrando usuario {}: {}", profile.username(), e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean callFollow(String followerId, String followedId) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-User-Id", followerId);
 
-            Map<String, String> body = Map.of("followeeId", followeeId);
+            Map<String, String> body = Map.of("followeeId", followedId);
             HttpEntity<Map<String, String>> entity = new HttpEntity<>(body, headers);
 
-            ResponseEntity<Void> response = restTemplate.exchange(
-                    apiBaseUrl + "/follow",
-                    HttpMethod.POST,
-                    entity,
-                    Void.class
-            );
+            ResponseEntity<Void> response = restTemplate.exchange(apiBaseUrl + "/follow", HttpMethod.POST, entity, Void.class);
             return response.getStatusCode().is2xxSuccessful();
         } catch (Exception e) {
-            log.warn("Error al llamar /follow: {}", e.getMessage());
+            log.warn("Error en /follow: {}", e.getMessage());
             return false;
         }
     }
 
-    /**
-     * POST /tweets con header X-User-Id = userId y body { "content": "..." }
-     * Retorna true si la respuesta fue 2xx.
-     */
     private boolean callPostTweet(String userId, String content) {
         try {
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-User-Id", userId);
+            headers.setContentType(MediaType.APPLICATION_JSON);
 
-            // Respetar límite de 280 caracteres de tu dominio
-            String safeContent = content.length() > 280
-                    ? content.substring(0, 277) + "..."
-                    : content;
-
-            Map<String, String> body = Map.of("content", safeContent);
+            Map<String, String> body = Map.of("content", content.length() > 280 ? content.substring(0, 280) : content);
             HttpEntity<Map<String, String>> entity = new HttpEntity<>(body, headers);
 
-            ResponseEntity<Void> response = restTemplate.exchange(
-                    apiBaseUrl + "/tweets",
-                    HttpMethod.POST,
-                    entity,
-                    Void.class
-            );
+            ResponseEntity<Void> response = restTemplate.exchange(apiBaseUrl + "/tweets", HttpMethod.POST, entity, Void.class);
             return response.getStatusCode().is2xxSuccessful();
         } catch (Exception e) {
-            log.warn("Error al llamar /tweets: {}", e.getMessage());
             return false;
         }
     }
