@@ -21,29 +21,17 @@ public class AgentScheduler {
     @Scheduled(fixedRate = 30000)
     public void publishAgentPosts() {
 
+        agentBehaviorService.tick();
+
         var agents = agentProviderPort.getActiveAgents();
 
         agents.forEach(agent -> {
 
             if (agentBehaviorService.shouldPost(agent)) {
 
-                log.info(
-                        "Agent {} decided to publish",
-                        agent.getName()
-                );
-
-                generateAgentPostUseCase
-                        .generateAndPublish(agent);
+                generateAgentPostUseCase.generateAndPublish(agent);
 
                 agentBehaviorService.registerPost(agent);
-
-            } else {
-
-                log.debug(
-                        "Agent {} skipped publishing",
-                        agent.getName()
-                );
-
             }
         });
     }

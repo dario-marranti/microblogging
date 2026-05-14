@@ -15,11 +15,13 @@ public class AgentBehaviorService {
 
     private final Random random = new Random();
 
+    private final Map<String, Instant> lastPostMap = new ConcurrentHashMap<>();
+
     /**
-     * Stores last post timestamps per agent.
+     * Emotional/energy state per agent.
+     * Simulates "mood" or "activity level".
      */
-    private final Map<String, Instant> lastPostMap =
-            new ConcurrentHashMap<>();
+    private final Map<String, Integer> energyMap = new ConcurrentHashMap<>();
 
     public boolean shouldPost(AgentProfile agent) {
 
@@ -27,46 +29,77 @@ public class AgentBehaviorService {
             return false;
         }
 
+        int energy = getEnergy(agent);
+
         if (isCoolingDown(agent)) {
             return false;
         }
 
-        int chance = random.nextInt(100);
+        // Base probability from profile
+        int baseChance = agent.getPostingProbability();
 
-        boolean shouldPost =
-                chance < agent.getPostingProbability();
+        // Energy influences behavior
+        int adjustedChance = baseChance + (energy / 2);
+
+        int roll = random.nextInt(100);
+
+        boolean decision = roll < adjustedChance;
 
         log.debug(
-                "Agent {} posting chance={} threshold={} result={}",
+                "Agent {} | roll={} threshold={} energy={}",
                 agent.getName(),
-                chance,
-                agent.getPostingProbability(),
-                shouldPost
+                roll,
+                adjustedChance,
+                energy
         );
 
-        return shouldPost;
+        return decision;
     }
 
     public void registerPost(AgentProfile agent) {
 
-        lastPostMap.put(
+        String id = agent.getUserId().value();
+
+        lastPostMap.put(id, Instant.now());
+
+        // Posting consumes energy
+        energyMap.put(id, Math.max(0, getEnergy(agent) - 30));
+    }
+
+    /**
+     * Simulates gradual energy recovery over time.
+     */
+    public void tick() {
+
+        energyMap.forEach((id, energy) -> {
+
+            int newEnergy = Math.min(100, energy + random.nextInt(10));
+
+            energyMap.put(id, newEnergy);
+
+            log.debug("Agent {} energy updated to {}", id, newEnergy);
+        });
+    }
+
+    private int getEnergy(AgentProfile agent) {
+
+        return energyMap.computeIfAbsent(
                 agent.getUserId().value(),
-                Instant.now()
+                id -> 70 + random.nextInt(30) // initial energy
         );
     }
 
     private boolean isCoolingDown(AgentProfile agent) {
 
-        Instant lastPost =
-                lastPostMap.get(agent.getUserId().value());
+        Instant last = lastPostMap.get(agent.getUserId().value());
 
-        if (lastPost == null) {
+        if (last == null) {
             return false;
         }
 
         long elapsed =
                 Instant.now().getEpochSecond()
-                        - lastPost.getEpochSecond();
+                        - last.getEpochSecond();
 
         return elapsed < agent.getCooldownSeconds();
     }
