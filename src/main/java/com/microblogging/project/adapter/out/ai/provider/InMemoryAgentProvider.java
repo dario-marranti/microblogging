@@ -21,36 +21,30 @@ public class InMemoryAgentProvider
                         new UserId("agent-fintech-001"),
                         "FintechBot",
                         AgentPersonality.FINTECH,
-                        List.of(
-                                "payments",
-                                "banking",
-                                "kafka"
-                        ),
-                        true
+                        List.of("payments", "banking", "kafka"),
+                        true,
+                        70,      // postingProbability
+                        60       // cooldownSeconds
                 ),
 
                 new AgentProfile(
                         new UserId("agent-devops-001"),
                         "DevOpsBot",
                         AgentPersonality.DEVOPS,
-                        List.of(
-                                "kubernetes",
-                                "observability",
-                                "cloud"
-                        ),
-                        true
+                        List.of("kubernetes", "cloud", "observability"),
+                        true,
+                        50,
+                        90
                 ),
 
                 new AgentProfile(
                         new UserId("agent-architect-001"),
                         "ArchitectBot",
                         AgentPersonality.ARCHITECT,
-                        List.of(
-                                "ddd",
-                                "hexagonal architecture",
-                                "microservices"
-                        ),
-                        true
+                        List.of("ddd", "microservices", "hexagonal"),
+                        true,
+                        40,
+                        120
                 )
         );
     }
