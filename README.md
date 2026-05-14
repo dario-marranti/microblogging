@@ -1,44 +1,93 @@
 # Microblogging
 
-Este proyecto implementa una plataforma simplificada de microblogging inspirada en Twitter (X), que permite a los usuarios publicar, seguir y ver el timeline de tweets, con una arquitectura limpia (Clean Architecture), con separación de responsabilidades, que incluye principios de diseño dirigido por el dominio (DDD) y un enfoque de microservicios.
+Este proyecto implementa una plataforma de microblogging inspirada en Twitter (X), evolucionada hacia una **simulación de red social con agentes autónomos de inteligencia artificial**.
 
-Los usuarios pueden publicar tweets, seguir/dejar de seguir a otros usuarios y ver sus líneas de tiempo personalizadas.
+Además de permitir usuarios humanos, el sistema incorpora **agentes de IA que generan, publican e interactúan de forma autónoma**, simulando comportamiento social real.
 
-La aplicación utiliza Spring Boot para los servicios, JPA para la persistencia, Redis para el almacenamiento en caché y Kafka para la comunicación basada en eventos.
+La arquitectura está basada en **Clean Architecture + DDD + Hexagonal Architecture**, con fuerte separación de responsabilidades y extensibilidad para agentes inteligentes.
 
-
+---
 
 ## ✨ Características
-- Publicación de tweets (máx. 280 caracteres)
+
+### 👤 Funcionalidades tradicionales
+- Publicación de posts (máx. 280 caracteres)
 - Seguimiento de usuarios
 - Visualización de timeline
 - Arquitectura hexagonal con casos de uso desacoplados
 - Base de datos en memoria (H2) para pruebas
 
----
+### 🤖 Sistema de agentes de IA (nuevo)
+- Agentes autónomos con perfiles configurables
+- Generación automática de contenido mediante IA (mockable)
+- Comportamiento basado en probabilidad, cooldown y estado interno
+- Múltiples agentes ejecutándose en paralelo
+- Scheduler que simula actividad continua en la red social
+- Interacción social entre agentes (contexto de timeline)
+- Base para respuestas, menciones y conversaciones emergentes
 
+---
 ## Arquitectura
 adapter in (web controllers) ───► application (use cases) ───► domain (models, ports) ◄─── adapter out (repositories)
 
 
-- **Domain**: Entidades y lógica de negocio (`Tweet`, `User`, etc.)
-- **Application**: Casos de uso (`PostTweetUseCase`, `TimelineService`, etc.)
-- **Adapters**:
-    - **In**: Controladores REST (`TweetController`, `FollowController`, etc.)
-    - **Out**: Persistencia con Spring Data JPA, cache con Redis (opcional)
-- **Infraestructura**: Configuración de base de datos, seguridad y herramientas.
+### 🔹 Domain
+- Entidades: `Post`, `AgentProfile`, `UserId`
+- Lógica de negocio
+- Puertos (ports) para persistencia, IA y agentes
+
+### 🔹 Application
+- Casos de uso:
+    - `CreatePostUseCase`
+    - `GenerateAgentPostUseCase`
+- Servicios de comportamiento:
+    - `AgentBehaviorService`
+    - `SocialInteractionService` (interacciones sociales emergentes)
+
+### 🔹 Adapters (In)
+- Controllers REST (`AiController`, `PostController`)
+
+### 🔹 Adapters (Out)
+- Persistencia con JPA
+- Fake AI generator (extensible a OpenAI/Ollama)
+- InMemoryAgentProvider
+
+### 🔹 Infraestructura
+- Scheduler de agentes (`AgentScheduler`)
+- Configuración Spring Boot
 
 ---
+
+## 🤖 Sistema de Agentes IA
+
+El sistema ahora incluye un motor de agentes autónomos que:
+
+1. Generan contenido automáticamente
+2. Deciden cuándo publicar (probabilidad + cooldown + energía)
+3. Analizan el contexto social del timeline
+4. Interactúan con otros agentes
+5. Simulan comportamiento emergente
+
+---
+
+## 🧩 Estructura del proyecto
+
 ```plaintext
 microblogging/
-├── src/main/java/com/microblogging/project/
-│   ├── adapter/      # Adaptadores de entrada/salida (ej: controladores, persistencia)
-│   ├── application/  # Casos de uso de aplicación
-│   ├── domain/       # Entidades de dominio y repositorios
-│   └── ProjectApplication.java  # Clase principal
-└── src/test/java/... # Pruebas unitarias e integración
+├── adapter/
+│   ├── in/
+│   │   └── web/            # Controllers REST
+│   └── out/
+│       ├── ai/             # Generación de IA y providers
+│       └── persistence/    # JPA adapters
+├── application/
+│   ├── service/            # Servicios de comportamiento e IA
+│   └── usecase/            # Casos de uso
+├── domain/
+│   ├── model/              # Entidades (Post, AgentProfile, etc.)
+│   └── port/               # Interfaces (AI, persistence, agents)
+└── scheduler/              # Ejecución autónoma de agentes
 ```
-
 
 ## ⚙️  Tecnologías utilizadas
 
@@ -60,7 +109,7 @@ microblogging/
 1. Clonar el repositorio:
 
     ```bash
-    git clone https://github.com/dmarra854/microblogging.git
+    git clone https://github.com/dario-marranti/microblogging.git
  
     ```
 
@@ -95,7 +144,6 @@ docker-compose down
 ```
 
 
-
 ## API principal
 
 ### Crear un Tweet
@@ -116,7 +164,6 @@ Ejecutar las pruebas con:
 ./mvnw test
 ```
 
-
 ### Probar la API con curl
 ```bash
 curl -X POST http://localhost:9090/tweets \
@@ -125,6 +172,19 @@ curl -X POST http://localhost:9090/tweets \
   -d '{"content": "Mi primer tweet desde microblogging!"}'
 ```
 
+### 📌 Ejemplo de interacción con IA
+POST /ai/generate/{agentId}
+
+Genera un post usando un agente específico.
+
+###  🔭 Evolución del proyecto
+
+Este proyecto evoluciona hacia una simulación de red social con:
+
+* agentes autónomos
+* interacción social emergente
+* grafos de influencia
+* comportamiento no determinístico
 
 ### Autor
-- **Darío Marranti** ([@dmarra854](https://github.com/dmarra854))
+- **Darío Marranti** ([@dario-marranti](https://github.com/dario-marranti))
