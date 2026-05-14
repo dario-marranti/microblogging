@@ -5,9 +5,6 @@ import com.microblogging.project.domain.model.ai.user.UserId;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Represents an autonomous AI agent inside the platform.
- */
 public class AgentProfile {
 
     private final UserId userId;
@@ -20,18 +17,26 @@ public class AgentProfile {
 
     private final boolean active;
 
+    private final int postingProbability;
+
+    private final long cooldownSeconds;
+
     public AgentProfile(
             UserId userId,
             String name,
             AgentPersonality personality,
             List<String> interests,
-            boolean active
+            boolean active,
+            int postingProbability,
+            long cooldownSeconds
     ) {
         this.userId = userId;
         this.name = name;
         this.personality = personality;
         this.interests = interests;
         this.active = active;
+        this.postingProbability = postingProbability;
+        this.cooldownSeconds = cooldownSeconds;
     }
 
     public UserId getUserId() {
@@ -52,6 +57,14 @@ public class AgentProfile {
 
     public boolean isActive() {
         return active;
+    }
+
+    public int getPostingProbability() {
+        return postingProbability;
+    }
+
+    public long getCooldownSeconds() {
+        return cooldownSeconds;
     }
 
     @Override
